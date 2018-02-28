@@ -43,7 +43,7 @@ No potential vulnerabilities have been identified in the crowdsale and token con
 
   The audit report is available here:
      
-TODO: Add audit report link.
+https://github.com/LeadcoinNetwork/crowdsale-smart-contract/blob/master/audit/leadcoin-audit.pdf
   
 ## Code
  
