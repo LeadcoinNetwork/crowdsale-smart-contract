@@ -1,6 +1,6 @@
 pragma solidity ^0.4.18;
 import '../ownership/Ownable.sol';
-import '../token/IERC20Token.sol';
+import '../token/StandardToken.sol';
 
 /*
     We consider every contract to be a 'token holder' since it's currently not possible
@@ -24,7 +24,7 @@ contract TokenHolder is Ownable {
         @param _to      account to receive the new amount
         @param _amount  amount to withdraw
     */
-    function withdrawTokens(IERC20Token _token, address _to, uint256 _amount) public onlyOwner {
+    function withdrawTokens(StandardToken _token, address _to, uint256 _amount) public onlyOwner {
         require(_token != address(0));
         require(_to != address(0));
         require(_to != address(this));

@@ -2,11 +2,12 @@ pragma solidity ^0.4.18;
 
 
 import './crowdsale/FinalizableCrowdsale.sol';
+import './bancor/TokenHolder.sol';
 import './math/SafeMath.sol';
 import './LeadcoinSmartToken.sol';
 
 
-contract LeadcoinCrowdsale is FinalizableCrowdsale {
+contract LeadcoinCrowdsale is TokenHolder,FinalizableCrowdsale {
 
     // =================================================================================================================
     //                                      Constants
@@ -21,6 +22,9 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
     // we limit the value to 10 (and not larger) to limit the run time of the function that process the grantees array.
     uint8 public constant MAX_TOKEN_GRANTEES = 10;
 
+    //we limit the amount of tokens we can mint to a grantee so it won't be exploit.
+    uint256 public constant MAX_GRANTEE_TOKENS_ALLOWED = 250000000 * 10 ** 18;    
+
     // LDC to ETH base rate
     uint256 public constant EXCHANGE_RATE = 15000;
 
@@ -29,10 +33,24 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
     // =================================================================================================================
 
     /**
+     * @dev Throws if called after crowdsale was finalized
+     */
+    modifier beforeFinzalized() {
+        require(!isFinalized);
+        _;
+    }
+    /**
+     * @dev Throws if called before crowdsale start time
+     */
+    modifier notBeforeSaleStarts() {
+        require(now >= startTime);
+        _;
+    }
+   /**
      * @dev Throws if called not during the crowdsale time frame
      */
     modifier onlyWhileSale() {
-        require(isActive());
+        require(now >= startTime && now < endTime);
         _;
     }
 
@@ -45,10 +63,13 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
     address public walletWebydo;       //10% of the total number of LDC tokens will be allocated to Webydo Ltd.
     address public walletReserve;   //30% of the total number of LDC tokens will be allocated to Leadcoin reserves
 
+
+    // Funds collected outside the crowdsale in wei
+    uint256 public fiatRaisedConvertedToWei;
+
     //Grantees - used for non-ether and presale bonus token generation
     address[] public presaleGranteesMapKeys;
     mapping (address => uint256) public presaleGranteesMap;  //address=>wei token amount
-
 
     // Hard cap in Wei
     uint256 public hardCap;
@@ -63,6 +84,8 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
 
     event GrantDeleted(address indexed _grantee, uint256 _hadAmount);
 
+    event FiatRaisedUpdated(address indexed _address, uint256 _fiatRaised);
+
     // =================================================================================================================
     //                                      Constructors
     // =================================================================================================================
@@ -74,7 +97,6 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
     address _walletWebydo,
     address _walletReserve,
     uint256 _cap,
-    uint256 _amountRaisedInPresale,
     LeadcoinSmartToken _leadcoinSmartToken)
     public
     Crowdsale(_startTime, _endTime, EXCHANGE_RATE, _wallet, _leadcoinSmartToken) {
@@ -83,7 +105,6 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
         require(_walletReserve != address(0));
         require(_leadcoinSmartToken != address(0));
         require(_cap > 0);
-        require(_amountRaisedInPresale > 0);
 
         walletTeam = _walletTeam;
         walletWebydo = _walletWebydo;
@@ -91,8 +112,7 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
 
         token = _leadcoinSmartToken;
 
-        hardCap = _cap * 10 ** 18;
-        weiRaised = weiRaised.add(_amountRaisedInPresale);
+        hardCap = _cap;
 
     }
 
@@ -110,7 +130,7 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
             token.issue(presaleGranteesMapKeys[i], presaleGranteesMap[presaleGranteesMapKeys[i]]);
         }
 
-        // Adding 50% of the total token supply (40% were generated during the crowdsale)
+        // Adding 50% of the total token supply (50% were generated during the crowdsale)
         // 50 * 2 = 100
         uint256 newTotalSupply = token.totalSupply().mul(200).div(100);
 
@@ -139,25 +159,20 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
     // =================================================================================================================
     // @return the total funds collected in wei(ETH and none ETH).
     function getTotalFundsRaised() public view returns (uint256) {
-        return weiRaised;
-    }
-
-    // @return true if the crowdsale is active, hence users can buy tokens
-    function isActive() public view returns (bool) {
-        return now >= startTime && now < endTime;
+        return fiatRaisedConvertedToWei.add(weiRaised);
     }
 
      // overriding Crowdsale#hasEnded to add cap logic
     // @return true if crowdsale event has ended
     function hasEnded() public view returns (bool) {
-        bool capReached = weiRaised >= hardCap;
+        bool capReached = getTotalFundsRaised() >= hardCap;
         return capReached || super.hasEnded();
     }
 
     // overriding Crowdsale#validPurchase to add extra cap logic
     // @return true if investors can buy at the moment
     function validPurchase() internal view returns (bool) {
-        bool withinCap = weiRaised < hardCap;
+        bool withinCap = getTotalFundsRaised() < hardCap;
         return withinCap && super.validPurchase();
     }
 
@@ -168,10 +183,10 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
     // Granted tokens are allocated to non-ether, presale, buyers.
     // @param _grantee address The address of the token grantee.
     // @param _value uint256 The value of the grant in wei token.
-    function addUpdateGrantee(address _grantee, uint256 _value) external onlyOwner onlyWhileSale {
+    function addUpdateGrantee(address _grantee, uint256 _value) external onlyOwner notBeforeSaleStarts beforeFinzalized {
         require(_grantee != address(0));
-        require(_value > 0);
-
+        require(_value > 0 && _value <= MAX_GRANTEE_TOKENS_ALLOWED);
+        
         // Adding new key if not present:
         if (presaleGranteesMap[_grantee] == 0) {
             require(presaleGranteesMapKeys.length < MAX_TOKEN_GRANTEES);
@@ -186,7 +201,7 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
 
     // @dev deletes entries from the grants list.
     // @param _grantee address The address of the token grantee.
-    function deleteGrantee(address _grantee) external onlyOwner onlyWhileSale {
+    function deleteGrantee(address _grantee) external onlyOwner notBeforeSaleStarts beforeFinzalized {
         require(_grantee != address(0));
         require(presaleGranteesMap[_grantee] != 0);
 
@@ -207,6 +222,16 @@ contract LeadcoinCrowdsale is FinalizableCrowdsale {
 
         GrantDeleted(_grantee, presaleGranteesMap[_grantee]);
     }
+
+    // @dev Set funds collected outside the crowdsale in wei.
+    //  note: we not to use accumulator to allow flexibility in case of humane mistakes.
+    // funds are converted to wei using the market conversion rate of USD\ETH on the day on the purchase.
+    // @param _fiatRaisedConvertedToWei number of none eth raised.
+    function setFiatRaisedConvertedToWei(uint256 _fiatRaisedConvertedToWei) external onlyOwner onlyWhileSale {
+        fiatRaisedConvertedToWei = _fiatRaisedConvertedToWei;
+        FiatRaisedUpdated(msg.sender, fiatRaisedConvertedToWei);
+    }
+
 
     /// @dev Accepts new ownership on behalf of the LeadcoinCrowdsale contract. This can be used, by the token sale
     /// contract itself to claim back ownership of the LeadcoinSmartToken contract.

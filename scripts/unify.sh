@@ -26,11 +26,11 @@ unify token/MintableToken.sol
 
 unify bancor/ISmartToken.sol
 unify bancor/LimitedTransferBancorSmartToken.sol
+unify bancor/TokenHolder.sol
 unify LeadcoinSmartToken.sol
 
-unify crowdsale/RefundVault.sol
 unify crowdsale/Crowdsale.sol
 unify crowdsale/FinalizableCrowdsale.sol
 
 # Leadcoin
-unify LeadcoinCrowdsale
+unify LeadcoinCrowdsale.sol

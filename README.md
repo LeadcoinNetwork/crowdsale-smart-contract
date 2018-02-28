@@ -29,7 +29,7 @@ The LDC / ETH rate will be 15000 LDC for every ETH
 
 * Contracts are written in [Solidity][solidity] and tested using [Truffle][truffle] and [testrpc][testrpc].
 
-* Our smart contract is based on [Open Zeppelin][openzeppelin] smart contracts [v1.3.0][openzeppelin_v1.3.0] (latest OZ commit merged is 8e01dd14f9211239213ae7bd4c6af92dd18d4ab7 from 24.10.2017).
+* Our smart contract is based on [Sirin Labs ICO][sirinlabicogithub] and [Open Zeppelin][openzeppelin] smart contracts [v1.3.0][openzeppelin_v1.3.0] (latest OZ commit merged is 8e01dd14f9211239213ae7bd4c6af92dd18d4ab7 from 24.10.2017).
 
 * LDC token is a **SmartToken**, implementing Bancor's SmartToken contract.
 
@@ -58,21 +58,24 @@ TODO: Add audit report link.
 ```cs
 function getTotalFundsRaised() public view returns (uint256)
 ```
-Returns the total funds collected in wei(ETH).
+Returns the total funds collected in wei(ETH and none ETH).
 
 **addUpdateGrantee**
 ```cs
-function addUpdateGrantee(address _grantee, uint256 _value) external onlyOwner onlyWhileSale
+function addUpdateGrantee(address _grantee, uint256 _value) external onlyOwner beforeFinzalized
 ```
 Adds/Updates address and token allocation for token grants.
 
 Granted tokens are allocated to non-Ether, presale, buyers.
 
-**isActive**
+
+**setFiatRaisedConvertedToWei**
 ```cs
-function isActive() public view returns (bool)
+function setFiatRaisedConvertedToWei(uint256 _fiatRaisedConvertedToWei) external onlyOwner onlyWhileSale
 ```
-Return true if the crowdsale is active, hence users can buy tokens
+Sets funds collected outside the crowdsale in wei.
+funds are converted to wei using the market conversion rate of USD\ETH on the day on the purchase.
+
 
 
 **hasEnded**
@@ -91,7 +94,7 @@ Return true if hardcap was not reached ( override crowdsale.sol)
 
 **deleteGrantee**
 ```cs
-function deleteGrantee(address _grantee) external onlyOwner onlyWhileSale
+function deleteGrantee(address _grantee) external onlyOwner beforeFinzalized
 ```
 Deletes entries from the grants list.
 
@@ -120,6 +123,12 @@ event GrantUpdated(address indexed _grantee, uint256 _oldAmount, uint256 _newAmo
 ```cs
 event GrantDeleted(address indexed _grantee, uint256 _hadAmount);
 ```
+
+**FiatRaisedUpdated**
+```cs
+event FiatRaisedUpdated(address indexed _address, uint256 _fiatRaised)
+```
+
 
 ### Dependencies
 
@@ -163,6 +172,7 @@ Apache License v2.0
 [testrpc]: https://github.com/ethereumjs/testrpc
 [bancor]: https://github.com/bancorprotocol/contracts
 [openzeppelin]: https://openzeppelin.org
+[sirinlabicogithub]: https://github.com/sirin-labs/crowdsale-smart-contract
 [openzeppelin_v1.3.0]: https://github.com/OpenZeppelin/zeppelin-solidity/releases/tag/v1.3.0
 [mattdf]: http://github.com/mattdf
 [decnus]: http://github.com/decanus

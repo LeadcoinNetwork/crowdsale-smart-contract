@@ -9,9 +9,13 @@
     "test": "scripts/test.sh",
     "coverage": "scripts/coverage.sh"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LeadcoinNetwork/crowdsale-smart-contract.git"
+  },
   "author": "",
   "license": "ISC",
-  "homepage": "https://www.leadcoin.network",
+  "homepage": "https://github.com/LeadcoinNetwork/crowdsale-smart-contract#readme",
   "devDependencies": {
     "babel-polyfill": "^6.26.0",
     "babel-preset-es2015": "^6.24.1",

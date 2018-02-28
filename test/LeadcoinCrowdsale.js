@@ -29,8 +29,7 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
         this.startTime = latestTime() + duration.weeks(1);
         this.endTime = this.startTime + duration.weeks(1)
         this.afterEndTime = this.endTime + duration.seconds(1)
-        this.hardCap = 500;
-        this.amountRaisedInPreSale = 400000000000000000000;
+        this.hardCap = 8000000000000000000;
         this.token = await LeadcoinSmartToken.new({from: owner});
 
         this.crowdsale = await LeadcoinCrowdsale.new(this.startTime,
@@ -40,7 +39,6 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
             walletWebydo,
             walletReserve,
             this.hardCap,
-            this.amountRaisedInPreSale,
             this.token.address,
             {
                 from: owner
@@ -51,6 +49,7 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
         await this.crowdsale.claimTokenOwnership({from: owner})
 
     })
+
 
     describe('Token destroy', function() {
 
@@ -157,7 +156,7 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
         })
 
 
-        it('Allocate Reserve token amount as 35% of the total supply', async function() {
+        it('Allocate Reserve token amount as 30% of the total supply', async function() {
             const expectedReserveTokenAmount = this.totalSupply.mul(0.30);
             let walletReserveBalance = await this.token.balanceOf(walletReserve);
 
@@ -203,9 +202,8 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
             }
         })
 
-        it('should not be before crowdsale time', async function() {
+        it('should not be before crowdsale starts', async function() {
             try {
-                await increaseTimeTo(this.startTime - duration.days(1))
                 await this.crowdsale.addUpdateGrantee(investor, 100, {
                     from: owner
                 });
@@ -215,9 +213,12 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
             }
         })
 
-        it('should not be after crowdsale time', async function() {
+        it('should not be after crowdsale finalized', async function() {
             try {
                 await increaseTimeTo(this.afterEndTime)
+                await this.crowdsale.finalize({
+                    from: owner
+                })
                 await this.crowdsale.addUpdateGrantee(investor, 100, {
                     from: owner
                 });
@@ -387,13 +388,13 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
 
      describe('Total Found', function() {
 
-                 it('should start with wei raised in presale', async function() {
+                 it('should start with 0', async function() {
                      let total = await this.crowdsale.getTotalFundsRaised();
 
-                     assert.equal(total, this.amountRaisedInPreSale);
+                     assert.equal(total, 0);
                  })
 
-                 it('should total amount be equeal to 2 + wei raised in presale', async function() {
+                 it('should total amount be equeal to 2', async function() {
                      await increaseTimeTo(this.startTime)
                      await this.crowdsale.sendTransaction({
                          value: ether(2),
@@ -401,70 +402,103 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
                      })
 
                     let total = await this.crowdsale.getTotalFundsRaised();
-                    let ethersRaisedInPreSale = this.amountRaisedInPreSale / (1 * 10 ** 18);
-
-                    total.should.be.bignumber.equal(ether(ethersRaisedInPreSale + 2));
+                    total.should.be.bignumber.equal(ether(2));
                  })
+                 it('should allow only owner account to call setFiatRaisedConvertedToWei', async function() {
+                    await increaseTimeTo(this.startTime)
+                    const {
+                        logs
+                    } = await this.crowdsale.setFiatRaisedConvertedToWei(1, {
+                        from: owner
+                    });
+       
+                    const event = logs.find(e => e.event === "FiatRaisedUpdated")
+                    should.exist(event)
+                })
+        
+                it('should not allow non-owner account to call setFiatRaisedConvertedToWei', async function() {
+                    try {
+                        await increaseTimeTo(this.startTime)
+                        await this.crowdsale.setFiatRaisedConvertedToWei(1, {
+                            from: investor
+                        });
+                        assert(false, "didn't throw");
+                    } catch (error) {
+                        return utils.ensureException(error);
+                    }
+                })
+        
+       
+                it('should not be at after crowdsale ended', async function() {
+                    try {
+                        await increaseTimeTo(this.afterEndTime)
+                        
+                        await this.crowdsale.setFiatRaisedConvertedToWei(1, {
+                            from: owner
+                        });
+                        assert(false, "didn't throw");
+                    } catch (error) {
+                        return utils.ensureException(error);
+                    }
+                })
              })
 
-    describe ('Force Hardcap', function() {
-        it('should allow to get tokens even if the price tops hardcap', async function() {
-            await increaseTimeTo(this.startTime)
-
-            await this.crowdsale.sendTransaction({
-                value: ether(this.hardCap + 1),
-                from: investor
-            });
-
-            let total = await this.crowdsale.getTotalFundsRaised();
-            let ethersRaisedInPreSale = this.amountRaisedInPreSale / (1 * 10 ** 18);
-
-            total.should.be.bignumber.equal(ether(this.hardCap + ethersRaisedInPreSale + 1));
-
-        })
-
-        it('should not allow to get tokens after hard cap reached', async function() {
-            await increaseTimeTo(this.startTime)
-            await this.crowdsale.sendTransaction({
-                value: ether(this.hardCap + 1),
-                from: investor
-            })
-            let total = await this.crowdsale.getTotalFundsRaised();
-            let ethersRaisedInPreSale = this.amountRaisedInPreSale / (1 * 10 ** 18);
-
-            total.should.be.bignumber.equal(ether(this.hardCap + ethersRaisedInPreSale + 1));
-
-            try {
-                await this.crowdsale.sendTransaction({
-                    value: ether(1),
-                    from: investor
+             describe ('Force Hardcap', function() {
+                it('should allow to get tokens even if the price tops hardcap', async function() {
+                    await increaseTimeTo(this.startTime)
+                    
+                    await this.crowdsale.sendTransaction({
+                        value: ether(9),
+                        from: investor
+                    });
+        
+                    let total = await this.crowdsale.getTotalFundsRaised();
+                    
+                    total.should.be.bignumber.equal(ether(9));
+        
                 })
-            } catch (error) {
-                return utils.ensureException(error);
-            }
-        })
-
-        it('should allow to call finalized after hard cap reached (before end time)', async function() {
-            await increaseTimeTo(this.startTime)
-            await this.crowdsale.sendTransaction({
-                value: ether(this.hardCap + 1),
-                from: investor
-            })
-            let total = await this.crowdsale.getTotalFundsRaised();
-            let ethersRaisedInPreSale = this.amountRaisedInPreSale / (1 * 10 ** 18);
-            total.should.be.bignumber.equal(ether(this.hardCap + ethersRaisedInPreSale + 1));
-
-            const {
-                logs
-            } = await this.crowdsale.finalize({
-                from: owner
-            })
-
-            const event = logs.find(e => e.event === "Finalized")
-            should.exist(event)
-
-        })
-    })
+        
+                it('should not allow to get tokens after hard cap reached', async function() {
+                    await increaseTimeTo(this.startTime)
+                    await this.crowdsale.sendTransaction({
+                        value: ether(9),
+                        from: investor
+                    })
+                    let total = await this.crowdsale.getTotalFundsRaised();
+        
+                    total.should.be.bignumber.equal(ether(9));
+        
+                    try {
+                        await this.crowdsale.sendTransaction({
+                            value: ether(1),
+                            from: investor
+                        })
+                    } catch (error) {
+                        return utils.ensureException(error);
+                    }
+                })
+        
+                it('should allow to call finalized after hard cap reached (before end time)', async function() {
+                    await increaseTimeTo(this.startTime)
+                    await this.crowdsale.sendTransaction({
+                        value: ether(9),
+                        from: investor
+                    })
+                    let total = await this.crowdsale.getTotalFundsRaised();
+        
+                    total.should.be.bignumber.equal(ether(9));
+        
+                    const {
+                        logs
+                    } = await this.crowdsale.finalize({
+                        from: owner
+                    })
+        
+                    const event = logs.find(e => e.event === "Finalized")
+                    should.exist(event)
+        
+                })
+            })         
 
     describe('Constructor Parameters', function() {
         it('should initilaized with a valid walletTeam adderss', async function() {
@@ -478,7 +512,6 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
                     walletWebydo,
                     walletReserve,
                     this.hardCap,
-                    this.amountRaisedInPreSale,
                     this.token.address,
 
                     {
@@ -504,7 +537,6 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
                     0x0,
                     walletReserve,
                     this.hardCap,
-                    this.amountRaisedInPreSale,
                     this.token.address,
 
                     {
@@ -534,7 +566,6 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
                     walletWebydo,
                     0x0,
                     this.hardCap,
-                    this.amountRaisedInPreSale,
                     this.token.address,
 
                     {
@@ -562,7 +593,6 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
                     walletWebydo,
                     walletReserve,
                     0,
-                    this.amountRaisedInPreSale,
                     this.token.address,
 
                     {
@@ -581,7 +611,7 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
             assert(false, "did not throw with invalid hard cap")
         })
 
-        it('should initilaized with a valid amount raised in presale', async function() {
+                it('should initilaized with a valid token adderss', async function() {
             try {
                 this.crowdsale = await LeadcoinCrowdsale.new(this.startTime,
                     this.endTime,
@@ -590,35 +620,6 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
                     walletWebydo,
                     walletReserve,
                     this.hardCap,
-                    0,
-                    this.token.address,
-
-                    {
-                        from: owner
-                    })
-
-                await this.token.transferOwnership(this.crowdsale.address, {from: owner});
-
-
-                await this.crowdsale.claimTokenOwnership({from: owner})
-
-            } catch (error) {
-                return utils.ensureException(error);
-            }
-
-            assert(false, "did not throw with invalid amount raised in presale")
-        })
-
-        it('should initilaized with a valid token adderss', async function() {
-            try {
-                this.crowdsale = await LeadcoinCrowdsale.new(this.startTime,
-                    this.endTime,
-                    wallet,
-                    walletTeam,
-                    walletWebydo,
-                    walletReserve,
-                    this.hardCap,
-                    this.amountRaisedInPreSale,
                     0x0,
 
                     {
@@ -647,7 +648,6 @@ contract('LeadcoinCrowdsale', function([_, investor, owner, wallet, walletTeam, 
                 walletWebydo,
                 walletReserve,
                 this.hardCap,
-                this.amountRaisedInPreSale,
                 this.token.address,
                 {
                     from: owner
